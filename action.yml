@@ -1,0 +1,62 @@
+name: 'Pacscript build/test Action'
+description: 'Builds Pacscript packages and outputs debs/logs.'
+author: cat-master21
+
+inputs:
+  pacscript:
+    description: 'Pacscript name'
+    default: *.pacscript
+    required: false
+  branch:
+    description: 'branch to build against'
+    default: main
+    required: false
+  custom-repo:
+    description: 'Add custom repo(s)'
+    required: false
+  pacstall-branch:
+    description: 'Use a different pacstall version'
+    default: master
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: checking if on a linux-based runner
+      shell: bash
+      run: |
+      if [ "$RUNNER_OS" == "Linux" ]; then
+      echo "Running on a Linux based runner (${{ matrix.os }})"
+      else
+      echo -e "Runner (${{ matrix.os }}) not supported! \nPlease use a linux based runner with apt (ubuntu -latest for example)"
+      exit 1
+      fi
+    - name: install dependencies pacsctall
+      shell: bash
+      run: |
+        dpkg --add-architecture i386
+        apt-get update
+        apt-get install apt-utils curl bash wget git sudo iputils-ping keyboard-configuration lsb-release desktop-file-utils -y
+        ln -fs /usr/share/zoneinfo/UTC /etc/localtime
+    - name: install pacstall
+      shell: unshare -U bash {0}
+      env:
+        shell: bash
+      run: |
+        export SUDO_USER=$USER
+        curl -fsSL https://git.io/JsADh > pacstall-install.sh
+        chmod +x ./pacstall-install.sh
+        export GITHUB_ACTIONS=true
+        export DEBIAN_FRONTEND=noninteractive
+        echo N\n | sudo -E ./pacstall-install.sh
+        rm -f ./pacstall-install.sh
+        pacstall -U pacstall ${{ inputs.pacstall-branch }}
+        ls -lad /tmp/pacstall
+    - name: install pacscripts
+      shell: unshare -U bash {0}
+      env:
+        shell: bash
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        export GITHUB_ACTIONS=true
+        pacstall --disable-prompts -Il ${{ inputs.pacscript }}
